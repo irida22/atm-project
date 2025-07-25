@@ -1,41 +1,30 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using ATM.Infrastructure.Data;
+using ATM.Core.Application;
+using ATM.API.DTOs;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Configuration
+    .SetBasePath(Path.Combine(builder.Environment.ContentRootPath, "Config"))
+    .AddJsonFile("appsettings.json");
+
+builder.Services.AddCors()
+    .AddDbContext<AtmDbContext>(options => 
+        options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")))
+    .AddScoped<UserService>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
+app.UseCors(options => options
+    .WithOrigins("http://localhost:5173")
+    .AllowAnyMethod()
+    .AllowAnyHeader());
 
-app.UseHttpsRedirection();
-
-var summaries = new[]
-{
-   "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+app.MapPost("/api/login", async (LoginRequest request, UserService userService) =>
+    await userService.ValidateUserAsync(request.Username, request.Password) is var user
+        ? Results.Ok(new { userId = user.Id })
+        : Results.Unauthorized());
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
